@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'screens/auth_screen.dart';
+import 'screens/main_screen.dart';
 import 'providers/cart_provider.dart';
 import 'providers/auth_provider.dart';
 
@@ -21,12 +22,15 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final session = Supabase.instance.client.auth.currentSession;
+    
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => CartProvider()),
         ChangeNotifierProvider(create: (context) => AuthProvider()),
       ],
       child: MaterialApp(
+        debugShowCheckedModeBanner: false,
         title: 'Vente App',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
@@ -34,7 +38,7 @@ class MyApp extends StatelessWidget {
           useMaterial3: true,
         ),
 
-        home: const AuthScreen(),
+        home: session != null ? const MainScreen() : const AuthScreen(),
       ),
     );
   }

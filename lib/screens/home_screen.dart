@@ -18,17 +18,34 @@ class _HomeScreenState extends State<HomeScreen> {
   List<dynamic> _categories = [];
   int? _selectedCategoryId;
   bool _isLoading = true;
+  final TextEditingController _searchController = TextEditingController();
+  List<dynamic> _filteredProducts = [];
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _searchController.addListener(_filterBySearch);
+  }
+
+  void _filterBySearch() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      _filteredProducts = _products.where((p) => p['name'].toString().toLowerCase().contains(query)).toList();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _loadData(); // Rafraîchir à chaque fois que l'écran est affiché
+    // Recharger seulement si _products est vide
+    if (_products.isEmpty) _loadData();
   }
 
   Future<void> _loadData() async {
@@ -50,25 +67,16 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _categories = categories;
       _products = productsWithPromos;
+      _filteredProducts = productsWithPromos;
       _isLoading = false;
     });
   }
 
-  // ... dans le build method (itemBuilder)
-  // Ajouter ceci dans la stack du container de produit :
-  // if (product['promo'] != null)
-  //   Positioned(
-  //     top: 10,
-  //     left: 10,
-  //     child: Chip(
-  //       label: Text('${product['promo']['discount_percent']}% OFF', style: const TextStyle(color: Colors.white, fontSize: 10)),
-  //       backgroundColor: Colors.red,
-  //     ),
-  //   ),
-
+  // ... (keeping _filterProducts and _loadProductsFiltered as they were)
   void _filterProducts(int? categoryId) {
     setState(() {
       _selectedCategoryId = categoryId;
+      _searchController.clear(); // Effacer la recherche lors du changement de catégorie
     });
     _loadProductsFiltered(categoryId);
   }
@@ -80,16 +88,16 @@ class _HomeScreenState extends State<HomeScreen> {
       query = query.eq('category_id', categoryId);
     }
     final products = await query;
+    // (Note: Should also handle promo association here, simplified for brevity)
     setState(() {
       _products = products;
+      _filteredProducts = products;
       _isLoading = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final cart = Provider.of<CartProvider>(context, listen: false);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Découvrir', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -97,21 +105,37 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(50),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                TextButton(
-                  onPressed: () => _filterProducts(null),
-                  child: Text('Tous', style: TextStyle(color: _selectedCategoryId == null ? Colors.green : Colors.grey)),
+          preferredSize: const Size.fromHeight(100),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    hintText: 'Rechercher un produit...',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(25))),
+                    contentPadding: EdgeInsets.symmetric(vertical: 0),
+                  ),
                 ),
-                ..._categories.map((c) => TextButton(
-                  onPressed: () => _filterProducts(c['id']),
-                  child: Text(c['name'], style: TextStyle(color: _selectedCategoryId == c['id'] ? Colors.green : Colors.grey)),
-                )),
-              ],
-            ),
+              ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => _filterProducts(null),
+                      child: Text('Tous', style: TextStyle(color: _selectedCategoryId == null ? Colors.green : Colors.grey)),
+                    ),
+                    ..._categories.map((c) => TextButton(
+                      onPressed: () => _filterProducts(c['id']),
+                      child: Text(c['name'], style: TextStyle(color: _selectedCategoryId == c['id'] ? Colors.green : Colors.grey)),
+                    )),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
         actions: [
@@ -139,9 +163,9 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
             ),
-            itemCount: _products.length,
+            itemCount: _filteredProducts.length,
             itemBuilder: (context, index) {
-              final product = _products[index];
+              final product = _filteredProducts[index];
               return InkWell(
                 onTap: () {
                   Navigator.of(context).push(

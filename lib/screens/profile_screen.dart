@@ -9,6 +9,7 @@ import 'my_orders_screen.dart';
 import 'add_product_screen.dart';
 import 'add_category_screen.dart';
 import 'add_promo_screen.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -69,8 +70,8 @@ class ProfileScreen extends StatelessWidget {
           _buildProfileCard(
             context,
             icon: Icons.lock_outline,
-            title: 'Gestion de mot de passe',
-            onTap: () {}, // TODO: Implémenter
+            title: 'Gestion de mot de passe et profil',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditProfileScreen())),
           ),
           if (isAuthorizedToSell)
             Column(

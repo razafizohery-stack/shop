@@ -16,6 +16,8 @@ class PaymentScreen extends StatefulWidget {  final String orderId;
 class _PaymentScreenState extends State<PaymentScreen> {
   final _refController = TextEditingController();
   final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _locationController = TextEditingController();
   String? _selectedMethod;
   bool _isLoading = false;
 
@@ -32,13 +34,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
   };
 
   Future<void> _submitPayment() async {
-    if (_refController.text.isEmpty || _nameController.text.isEmpty || _selectedMethod == null) return;
+    if (_refController.text.isEmpty || _nameController.text.isEmpty || _phoneController.text.isEmpty || _locationController.text.isEmpty || _selectedMethod == null) return;
     setState(() => _isLoading = true);
 
     await Supabase.instance.client.from('payments').insert({
       'order_id': widget.orderId,
       'payment_method': _selectedMethod,
-      'reference': 'Nom: ${_nameController.text} | Ref: ${_refController.text}',
+      'reference': _refController.text,
+      'payer_name': _nameController.text,
+      'payer_phone': _phoneController.text,
+      'delivery_location': _locationController.text,
       'status': 'pending',
     });
 
@@ -82,6 +87,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
     // Ajouter des listeners pour réévaluer le bouton de validation
     _refController.addListener(_updateUI);
     _nameController.addListener(_updateUI);
+    _phoneController.addListener(_updateUI);
+    _locationController.addListener(_updateUI);
   }
 
   void _updateUI() {
@@ -92,8 +99,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
   void dispose() {
     _refController.removeListener(_updateUI);
     _nameController.removeListener(_updateUI);
+    _phoneController.removeListener(_updateUI);
+    _locationController.removeListener(_updateUI);
     _refController.dispose();
     _nameController.dispose();
+    _phoneController.dispose();
+    _locationController.dispose();
     super.dispose();
   }
 
@@ -139,13 +150,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
             const SizedBox(height: 10),
             TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Votre Nom', border: OutlineInputBorder())),
             const SizedBox(height: 10),
+            TextField(controller: _phoneController, decoration: const InputDecoration(labelText: 'Votre Numéro de téléphone', border: OutlineInputBorder()), keyboardType: TextInputType.phone),
+            const SizedBox(height: 10),
+            TextField(controller: _locationController, decoration: const InputDecoration(labelText: 'Lieu de livraison', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
             TextField(controller: _refController, decoration: const InputDecoration(labelText: 'ID de transaction (Reçu par SMS)', border: OutlineInputBorder())),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: _isLoading || _selectedMethod == null || _refController.text.isEmpty ? null : _submitPayment,
+                onPressed: _isLoading || _selectedMethod == null || _refController.text.isEmpty || _nameController.text.isEmpty || _phoneController.text.isEmpty || _locationController.text.isEmpty ? null : _submitPayment,
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                 child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Valider mon paiement'),
               ),

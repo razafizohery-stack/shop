@@ -46,6 +46,7 @@ class _CartScreenState extends State<CartScreen> {
       await supabase.from('order_items').insert({
         'order_id': orderId,
         'product_id': item.id,
+        'variant_id': item.variantId,
         'quantity': item.quantity,
         'price': item.price,
       });
@@ -64,15 +65,25 @@ class _CartScreenState extends State<CartScreen> {
   Widget build(BuildContext context) {
     final cart = Provider.of<CartProvider>(context);
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text('Mon Panier', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
+        centerTitle: true,
       ),
       body: cart.items.isEmpty
-          ? const Center(child: Text('Votre panier est vide', style: TextStyle(fontSize: 18)))
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.shopping_cart_outlined, size: 80, color: Colors.grey[400]),
+                  const SizedBox(height: 20),
+                  const Text('Votre panier est vide', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                ],
+              ),
+            )
           : Column(
               children: [
                 Expanded(
@@ -82,16 +93,57 @@ class _CartScreenState extends State<CartScreen> {
                     itemBuilder: (context, index) {
                       final item = cart.items.values.toList()[index];
                       return Card(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 2,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        elevation: 0,
                         margin: const EdgeInsets.only(bottom: 12),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(12),
-                          title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          subtitle: Text('Quantité: ${item.quantity} | Prix: ${(item.price * item.quantity).toStringAsFixed(0)} MGA', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w600)),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.red),
-                            onPressed: () => cart.removeItem(item.id),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[200],
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.shopping_bag, color: Colors.grey),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    const SizedBox(height: 4),
+                                    Text('${item.price.toStringAsFixed(0)} MGA', style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.remove_circle_outline, size: 20),
+                                          onPressed: () => cart.decrementItem(item.id),
+                                        ),
+                                        Text('${item.quantity}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                        IconButton(
+                                          icon: const Icon(Icons.add_circle_outline, size: 20),
+                                          onPressed: () {
+                                            final success = cart.addItem(item.id, item.variantId, item.name, item.price, item.availableStock);
+                                            if (!success) {
+                                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Stock limite atteint !'), backgroundColor: Colors.red));
+                                            }
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                onPressed: () => cart.removeItem(item.id),
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -103,59 +155,52 @@ class _CartScreenState extends State<CartScreen> {
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
                   ),
                   child: Column(
                     children: [
-                      // Promo Input
                       Row(
                         children: [
                           Expanded(
                             child: TextField(
                               controller: _promoController,
-                              decoration: const InputDecoration(labelText: 'Code Promo', border: OutlineInputBorder()),
+                              decoration: InputDecoration(
+                                labelText: 'Code Promo',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                filled: true,
+                                fillColor: Colors.grey[100],
+                              ),
                             ),
                           ),
                           const SizedBox(width: 10),
-                          ElevatedButton(onPressed: () => _applyPromo(cart), child: const Text('Appliquer')),
+                          ElevatedButton(
+                            onPressed: () => _applyPromo(cart),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: const Text('Appliquer'),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 20),
-                      // Totals
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Sous-total:'),
-                          Text('${cart.subtotal.toStringAsFixed(0)} MGA'),
-                        ],
-                      ),
+                      _buildTotalRow('Sous-total', '${cart.subtotal.toStringAsFixed(0)} MGA'),
                       if (cart.discountPercent > 0)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Réduction (${cart.discountPercent}%):'),
-                            Text('-${cart.discountAmount.toStringAsFixed(0)} MGA', style: const TextStyle(color: Colors.red)),
-                          ],
-                        ),
-                      const Divider(),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Total:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          Text('${cart.totalAmount.toStringAsFixed(0)} MGA', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
-                        ],
-                      ),
+                        _buildTotalRow('Réduction (${cart.discountPercent}%)', '-${cart.discountAmount.toStringAsFixed(0)} MGA', color: Colors.red),
+                      const Divider(height: 30),
+                      _buildTotalRow('Total', '${cart.totalAmount.toStringAsFixed(0)} MGA', fontSize: 20, isBold: true),
                       const SizedBox(height: 20),
                       SizedBox(
                         width: double.infinity,
-                        height: 50,
+                        height: 55,
                         child: ElevatedButton(
                           onPressed: cart.items.isEmpty ? null : () => _placeOrder(context, cart),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
+                            backgroundColor: Colors.blueAccent,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          child: const Text('Commander', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          child: const Text('Passer à la commande', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         ),
                       ),
                     ],
@@ -163,6 +208,19 @@ class _CartScreenState extends State<CartScreen> {
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildTotalRow(String label, String value, {Color? color, double fontSize = 16, bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(fontSize: fontSize, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+          Text(value, style: TextStyle(fontSize: fontSize, fontWeight: isBold ? FontWeight.bold : FontWeight.bold, color: color ?? Colors.black)),
+        ],
+      ),
     );
   }
 }

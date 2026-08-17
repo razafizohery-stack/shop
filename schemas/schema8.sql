@@ -99,6 +99,9 @@ CREATE POLICY "Users can insert their own orders" ON orders FOR INSERT WITH CHEC
 
 -- 5. Paiements
 CREATE POLICY "Users can insert their own payments" ON payments FOR INSERT WITH CHECK (true); -- Simplifié pour le test, à restreindre si nécessaire
+CREATE POLICY "Vendeurs and Admins can update payments" ON payments FOR UPDATE USING (
+  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('vendeur', 'admin'))
+);
 
 -- 6. Prix
 CREATE POLICY "Public prices are viewable by everyone" ON product_prices FOR SELECT USING (true);
