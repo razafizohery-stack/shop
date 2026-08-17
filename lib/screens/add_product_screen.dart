@@ -1,5 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({super.key});
@@ -19,6 +23,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   int? _selectedCategoryId;
   List<dynamic> _categories = [];
   bool _isLoading = false;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -30,11 +35,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
   void _addVariant() {
     setState(() {
       _variants.add({
-        'color': null, // Store color value directly
+        'color': null,
         'sizeType': _sizeTypes.first,
         'sizeValueController': TextEditingController(),
         'quantityController': TextEditingController(),
-        'imageUrlController': TextEditingController(),
+        'imageFile': null,
+        'uploadedUrl': null,
+        'isUploading': false,
       });
     });
   }
@@ -43,9 +50,44 @@ class _AddProductScreenState extends State<AddProductScreen> {
     setState(() {
       _variants[index]['sizeValueController'].dispose();
       _variants[index]['quantityController'].dispose();
-      _variants[index]['imageUrlController'].dispose();
       _variants.removeAt(index);
     });
+  }
+
+  Future<void> _pickAndUploadImage(int index) async {
+    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile == null) return;
+
+    setState(() => _variants[index]['isUploading'] = true);
+
+    try {
+      final file = File(pickedFile.path);
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${pickedFile.name}';
+
+      // 1. Get signed URL from Edge Function
+      final response = await Supabase.instance.client.functions.invoke(
+        'get-upload-url',
+        body: {'fileName': fileName, 'contentType': 'image/jpeg'},
+      );
+      
+      final String uploadUrl = response.data['url'];
+
+      // 2. Upload to R2
+      await http.put(
+        Uri.parse(uploadUrl),
+        body: await file.readAsBytes(),
+        headers: {'Content-Type': 'image/jpeg'},
+      );
+
+      setState(() {
+        _variants[index]['imageFile'] = file;
+        _variants[index]['uploadedUrl'] = 'https://pub-e136bbc215884295b00fbea04e868822.r2.dev/$fileName'; // Ensure this matches R2_PUBLIC_URL
+        _variants[index]['isUploading'] = false;
+      });
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur upload: $e')));
+      setState(() => _variants[index]['isUploading'] = false);
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -68,19 +110,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
         'price': double.parse(_priceController.text),
         'category_id': _selectedCategoryId,
         'seller_id': user?.id,
+        'image_url': _variants.isNotEmpty ? _variants.first['uploadedUrl'] : null, // Image principale
       }).select().single();
 
       final productId = productResponse['id'];
 
       for (var variant in _variants) {
-        await Supabase.instance.client.from('product_variants').insert({
+        print('DEBUG: Inserting variant: ${variant['sizeValueController'].text}');
+        final insertData = {
           'product_id': productId,
           'color': variant['color'],
           'size': variant['sizeValueController'].text.isEmpty ? null : variant['sizeValueController'].text,
           'size_type': variant['sizeType'],
           'quantity': int.tryParse(variant['quantityController'].text) ?? 0,
-          'image_url': variant['imageUrlController'].text.isEmpty ? null : variant['imageUrlController'].text,
-        });
+          'image_url': variant['uploadedUrl'], // Image de la variante
+        };
+        print('DEBUG: Data to insert: $insertData');
+        await Supabase.instance.client.from('product_variants').insert(insertData);
       }
 
       if (mounted) Navigator.pop(context);
@@ -99,10 +145,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
     for (var v in _variants) {
       v['sizeValueController'].dispose();
       v['quantityController'].dispose();
-      v['imageUrlController'].dispose();
     }
     super.dispose();
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -118,7 +164,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
           children: [
             _buildSectionTitle('Informations Générales'),
             _buildTextField(_nameController, 'Nom du produit', Icons.title),
-            _buildTextField(_priceController, 'Prix (€)', Icons.euro, keyboardType: TextInputType.number),
+            _buildTextField(_priceController, 'Prix (MGA)', Icons.euro, keyboardType: TextInputType.number),
             _buildTextField(_descriptionController, 'Description', Icons.description, maxLines: 3),
             DropdownButtonFormField(
               decoration: const InputDecoration(labelText: 'Catégorie', prefixIcon: Icon(Icons.category), border: OutlineInputBorder()),
@@ -220,7 +266,25 @@ class _AddProductScreenState extends State<AddProductScreen> {
             const SizedBox(height: 15),
             TextField(controller: v['sizeValueController'], decoration: const InputDecoration(labelText: 'Valeur (ex: XL, 42)', border: OutlineInputBorder())),
             const SizedBox(height: 15),
-            TextField(controller: v['imageUrlController'], decoration: const InputDecoration(labelText: 'URL Image', border: OutlineInputBorder())),
+            GestureDetector(
+              onTap: () => _pickAndUploadImage(index),
+              child: Container(
+                height: 150,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: v['isUploading']
+                    ? const Center(child: CircularProgressIndicator())
+                    : v['imageFile'] != null
+                        ? Image.file(v['imageFile'], fit: BoxFit.cover)
+                        : const Center(child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [Icon(Icons.add_a_photo), Text('Ajouter Image')],
+                          )),
+              ),
+            ),
             const SizedBox(height: 15),
             TextField(controller: v['quantityController'], decoration: const InputDecoration(labelText: 'Quantité', border: OutlineInputBorder()), keyboardType: TextInputType.number),
           ],

@@ -1,8 +1,10 @@
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:android_intent_plus/android_intent.dart';
+import '../providers/cart_provider.dart';
 
 class PaymentScreen extends StatefulWidget {  final String orderId;
   final double totalAmount;
@@ -48,6 +50,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     });
 
     if (mounted) {
+      Provider.of<CartProvider>(context, listen: false).clear();
       Navigator.of(context).popUntil((route) => route.isFirst);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Paiement soumis, en attente de vérification.')),
